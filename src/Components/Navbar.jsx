@@ -4,7 +4,7 @@ import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { FaBars, FaTimes, FaShoppingCart, FaHeart, FaUser, FaSignOutAlt, FaUserCircle } from 'react-icons/fa';
 import { GiHamburger } from 'react-icons/gi';
-import { logoutAdmin } from '../redux/slicer/adminSlice'; // ✅ added resetAdminState
+import { logoutUser } from '../redux/slicer/userSlice'; // ✅ changed from adminSlice
 
 const Navbar = () => {
   const dispatch = useDispatch();
@@ -16,8 +16,9 @@ const Navbar = () => {
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
 
-  const { admin } = useSelector((state) => state.admin);
-  const isLoggedIn = !!admin;
+  // ✅ Changed from state.admin to state.user
+  const { user } = useSelector((state) => state.user);
+  const isLoggedIn = !!user;
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 50);
@@ -25,12 +26,13 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // Close dropdown & sidebar on route change – this already handles closing
+  // Close dropdown & sidebar on route change
   useEffect(() => {
     setIsOpen(false);
     setUserDropdownOpen(false);
   }, [location]);
 
+  // Close dropdown on click outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
@@ -46,8 +48,7 @@ const Navbar = () => {
   const toggleUserDropdown = () => setUserDropdownOpen(!userDropdownOpen);
 
   const handleLogout = () => {
-    dispatch(logoutAdmin());
-    dispatch(resetAdminState());
+    dispatch(logoutUser());          // ✅ logoutUser from userSlice
     navigate('/login');
     setUserDropdownOpen(false);
   };
@@ -125,10 +126,10 @@ const Navbar = () => {
                   </button>
                   {userDropdownOpen && (
                     <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-2xl py-1 text-gray-800 z-10 border border-gray-100">
-                      {/* ✅ No onClick needed – dropdown closes automatically on route change */}
                       <Link
                         to="/profile"
                         className="flex items-center px-4 py-2 hover:bg-red-50 transition-colors duration-200"
+                        onClick={() => setUserDropdownOpen(false)}
                       >
                         <FaUserCircle className="mr-2 text-red-600" />
                         Profile
@@ -136,6 +137,7 @@ const Navbar = () => {
                       <Link
                         to="/cart"
                         className="flex items-center px-4 py-2 hover:bg-red-50 transition-colors duration-200"
+                        onClick={() => setUserDropdownOpen(false)}
                       >
                         <FaShoppingCart className="mr-2 text-red-600" />
                         Cart
@@ -143,6 +145,7 @@ const Navbar = () => {
                       <Link
                         to="/wishlist"
                         className="flex items-center px-4 py-2 hover:bg-red-50 transition-colors duration-200"
+                        onClick={() => setUserDropdownOpen(false)}
                       >
                         <FaHeart className="mr-2 text-red-600" />
                         Wishlist
@@ -187,15 +190,15 @@ const Navbar = () => {
                   </button>
                   {userDropdownOpen && (
                     <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-2xl py-1 text-gray-800 z-10 border border-gray-100">
-                      <Link to="/profile" className="flex items-center px-4 py-2 hover:bg-red-50 transition-colors duration-200">
+                      <Link to="/profile" className="flex items-center px-4 py-2 hover:bg-red-50 transition-colors duration-200" onClick={() => setUserDropdownOpen(false)}>
                         <FaUserCircle className="mr-2 text-red-600" />
                         Profile
                       </Link>
-                      <Link to="/cart" className="flex items-center px-4 py-2 hover:bg-red-50 transition-colors duration-200">
+                      <Link to="/cart" className="flex items-center px-4 py-2 hover:bg-red-50 transition-colors duration-200" onClick={() => setUserDropdownOpen(false)}>
                         <FaShoppingCart className="mr-2 text-red-600" />
                         Cart
                       </Link>
-                      <Link to="/wishlist" className="flex items-center px-4 py-2 hover:bg-red-50 transition-colors duration-200">
+                      <Link to="/wishlist" className="flex items-center px-4 py-2 hover:bg-red-50 transition-colors duration-200" onClick={() => setUserDropdownOpen(false)}>
                         <FaHeart className="mr-2 text-red-600" />
                         Wishlist
                       </Link>
@@ -228,7 +231,7 @@ const Navbar = () => {
         </div>
       </nav>
 
-      {/* Sidebar – unchanged, it already works */}
+      {/* Sidebar */}
       {isOpen && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden animate-fadeIn"

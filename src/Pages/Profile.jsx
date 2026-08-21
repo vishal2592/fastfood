@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import { toast } from 'react-toastify';
 import {
   FaUserCircle,
   FaEnvelope,
@@ -13,41 +15,96 @@ import {
   FaCheckCircle,
   FaShieldAlt,
   FaPhone,
-  FaMapMarkerAlt,
 } from 'react-icons/fa';
 import { GiHamburger } from 'react-icons/gi';
-import { getAdminProfile, logoutAdmin } from '../redux/slicer/adminSlice';
-import { Link } from 'react-router-dom';
+import {
+  getUserProfile,
+  updateUserProfile,
+  logoutUser,
+  clearUserSuccess,
+  clearUserError,
+} from '../redux/slicer/userSlice';
 
 const Profile = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { admin, loading, error, success } = useSelector((state) => state.admin);
+  const { user, loading, error, success } = useSelector((state) => state.user);
 
   const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    // add more fields as needed (address, etc.)
+  });
 
   // Fetch profile on mount
   useEffect(() => {
-    dispatch(getAdminProfile());
+    dispatch(getUserProfile());
   }, [dispatch]);
 
-  // Redirect if not logged in (optional – you might want to handle this via protected routes)
+  // Show toast on successful update
   useEffect(() => {
-    if (!loading && !admin && !error) {
-      // If no admin and not loading, maybe redirect to login
-      // But we'll show a message instead to keep it user-friendly
+    if (success) {
+      toast.success('Profile updated successfully!');
+      dispatch(clearUserSuccess());
+      setIsEditing(false);
     }
-  }, [loading, admin, error]);
+  }, [success, dispatch]);
+
+  // Show toast on error
+  useEffect(() => {
+    if (error) {
+      toast.error(error);
+      dispatch(clearUserError());
+    }
+  }, [error, dispatch]);
+
+  // Populate edit form when user loads
+  useEffect(() => {
+    if (user) {
+      setEditData({
+        name: user.name || '',
+        email: user.email || '',
+        phone: user.phone || '',
+      });
+    }
+  }, [user]);
 
   const handleLogout = () => {
-    dispatch(logoutAdmin());
-    dispatch(resetAdminState());
+    dispatch(logoutUser());
     navigate('/login');
   };
 
   const handleEditToggle = () => {
+    if (isEditing) {
+      // Cancel edit – reset form to current user data
+      setEditData({
+        name: user.name || '',
+        email: user.email || '',
+        phone: user.phone || '',
+      });
+    }
     setIsEditing(!isEditing);
-    // You can implement edit logic here (e.g., open modal or navigate to edit page)
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setEditData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleSave = () => {
+    // Basic validation
+    if (!editData.name.trim()) {
+      toast.warning('Name is required');
+      return;
+    }
+    if (!editData.email.trim() || !/\S+@\S+\.\S+/.test(editData.email)) {
+      toast.warning('Please enter a valid email');
+      return;
+    }
+
+    dispatch(updateUserProfile(editData));
   };
 
   // Format date
@@ -60,8 +117,8 @@ const Profile = () => {
     });
   };
 
-  // Loading state
-  if (loading) {
+  // Loading state (initial load)
+  if (loading && !user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 flex items-center justify-center pt-20">
         <div className="text-center">
@@ -72,8 +129,8 @@ const Profile = () => {
     );
   }
 
-  // Error state
-  if (error) {
+  // Error state – only if we have an error and no user (avoid showing error after update if user still exists)
+  if (error && !user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 flex items-center justify-center pt-20 p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
@@ -83,7 +140,7 @@ const Profile = () => {
           <h2 className="text-xl font-bold text-gray-800 mb-2">Failed to Load Profile</h2>
           <p className="text-gray-600 text-sm mb-4">{error}</p>
           <button
-            onClick={() => dispatch(getAdminProfile())}
+            onClick={() => dispatch(getUserProfile())}
             className="bg-red-600 text-white px-6 py-2 rounded-lg hover:bg-red-700 transition"
           >
             Retry
@@ -94,7 +151,7 @@ const Profile = () => {
   }
 
   // Not logged in
-  if (!admin) {
+  if (!user) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 flex items-center justify-center pt-20 p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
@@ -113,6 +170,7 @@ const Profile = () => {
     );
   }
 
+  // Main profile view
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 pt-20 pb-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto">
@@ -131,7 +189,6 @@ const Profile = () => {
             <div className="absolute inset-0 flex items-center justify-center">
               <GiHamburger className="text-white/20 text-6xl" />
             </div>
-            {/* Decorative elements */}
             <div className="absolute -top-10 -right-10 w-40 h-40 bg-yellow-400 rounded-full opacity-10"></div>
             <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-orange-400 rounded-full opacity-10"></div>
           </div>
@@ -141,28 +198,28 @@ const Profile = () => {
             <div className="flex flex-col sm:flex-row items-center -mt-12 sm:-mt-16">
               <div className="flex-shrink-0">
                 <div className="w-24 h-24 sm:w-32 sm:h-32 rounded-full border-4 border-white shadow-lg overflow-hidden bg-gray-100">
-                  {admin.avatar ? (
-                    <img src={admin.avatar} alt={admin.name} className="w-full h-full object-cover" />
+                  {user.profileImage ? (
+                    <img src={user.profileImage} alt={user.name} className="w-full h-full object-cover" />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center bg-red-100 text-red-600 text-4xl sm:text-5xl font-bold">
-                      {admin.name?.charAt(0).toUpperCase() || 'A'}
+                      {user.name?.charAt(0).toUpperCase() || 'U'}
                     </div>
                   )}
                 </div>
               </div>
               <div className="mt-3 sm:mt-0 sm:ml-6 text-center sm:text-left flex-1">
                 <h2 className="text-2xl sm:text-3xl font-bold text-gray-800">
-                  {admin.name || 'Admin'}
+                  {user.name || 'User'}
                 </h2>
                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 text-sm text-gray-500">
                   <span className="flex items-center gap-1">
                     <FaUserTag className="text-red-500" />
-                    {admin.role || 'Admin'}
+                    {user.role || 'User'}
                   </span>
                   <span className="hidden sm:inline">•</span>
                   <span className="flex items-center gap-1">
                     <FaCalendarAlt className="text-red-500" />
-                    Joined {formatDate(admin.createdAt)}
+                    Joined {formatDate(user.createdAt)}
                   </span>
                 </div>
               </div>
@@ -172,7 +229,7 @@ const Profile = () => {
                   className="flex items-center gap-1 px-4 py-2 bg-yellow-400 text-red-600 rounded-lg font-semibold hover:bg-yellow-300 transition shadow-md hover:shadow-lg text-sm"
                 >
                   <FaEdit />
-                  Edit
+                  {isEditing ? 'Cancel' : 'Edit'}
                 </button>
                 <button
                   onClick={handleLogout}
@@ -185,116 +242,123 @@ const Profile = () => {
             </div>
           </div>
 
-          {/* Profile Details */}
+          {/* Profile Details or Edit Form */}
           <div className="border-t border-gray-100 px-4 sm:px-6 py-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Account Details</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Email */}
-              <div className="bg-gray-50 rounded-xl p-4 flex items-start gap-3">
-                <FaEnvelope className="text-red-500 mt-1" />
-                <div>
-                  <p className="text-xs text-gray-400 font-medium">Email Address</p>
-                  <p className="text-gray-800 font-medium">{admin.email || 'N/A'}</p>
-                </div>
-              </div>
-
-              {/* Role */}
-              <div className="bg-gray-50 rounded-xl p-4 flex items-start gap-3">
-                <FaShieldAlt className="text-red-500 mt-1" />
-                <div>
-                  <p className="text-xs text-gray-400 font-medium">Role</p>
-                  <p className="text-gray-800 font-medium capitalize">{admin.role || 'Admin'}</p>
-                </div>
-              </div>
-
-              {/* Phone – if available in schema */}
-              {admin.phone && (
-                <div className="bg-gray-50 rounded-xl p-4 flex items-start gap-3">
-                  <FaPhone className="text-red-500 mt-1" />
-                  <div>
-                    <p className="text-xs text-gray-400 font-medium">Phone Number</p>
-                    <p className="text-gray-800 font-medium">{admin.phone}</p>
+            {!isEditing ? (
+              // View mode
+              <>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Account Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="bg-gray-50 rounded-xl p-4 flex items-start gap-3">
+                    <FaEnvelope className="text-red-500 mt-1" />
+                    <div>
+                      <p className="text-xs text-gray-400 font-medium">Email Address</p>
+                      <p className="text-gray-800 font-medium">{user.email || 'N/A'}</p>
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-4 flex items-start gap-3">
+                    <FaShieldAlt className="text-red-500 mt-1" />
+                    <div>
+                      <p className="text-xs text-gray-400 font-medium">Role</p>
+                      <p className="text-gray-800 font-medium capitalize">{user.role || 'User'}</p>
+                    </div>
+                  </div>
+                  {user.phone && (
+                    <div className="bg-gray-50 rounded-xl p-4 flex items-start gap-3">
+                      <FaPhone className="text-red-500 mt-1" />
+                      <div>
+                        <p className="text-xs text-gray-400 font-medium">Phone Number</p>
+                        <p className="text-gray-800 font-medium">{user.phone}</p>
+                      </div>
+                    </div>
+                  )}
+                  <div className="bg-gray-50 rounded-xl p-4 flex items-start gap-3">
+                    <FaCalendarAlt className="text-red-500 mt-1" />
+                    <div>
+                      <p className="text-xs text-gray-400 font-medium">Member Since</p>
+                      <p className="text-gray-800 font-medium">{formatDate(user.createdAt)}</p>
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-4 flex items-start gap-3 md:col-span-2">
+                    <FaCheckCircle className="text-green-500 mt-1" />
+                    <div>
+                      <p className="text-xs text-gray-400 font-medium">Account Status</p>
+                      <p className="text-green-600 font-medium">
+                        {user.isActive ? 'Active' : 'Inactive'}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              )}
-
-              {/* Joined Date */}
-              <div className="bg-gray-50 rounded-xl p-4 flex items-start gap-3">
-                <FaCalendarAlt className="text-red-500 mt-1" />
-                <div>
-                  <p className="text-xs text-gray-400 font-medium">Member Since</p>
-                  <p className="text-gray-800 font-medium">{formatDate(admin.createdAt)}</p>
+              </>
+            ) : (
+              // Edit mode
+              <div>
+                <h3 className="text-lg font-semibold text-gray-800 mb-4">Edit Profile</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                    <input
+                      type="text"
+                      name="name"
+                      value={editData.name}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input
+                      type="email"
+                      name="email"
+                      value={editData.email}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                    <input
+                      type="text"
+                      name="phone"
+                      value={editData.phone}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
+                    />
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={handleSave}
+                      disabled={loading}
+                      className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {loading ? (
+                        <FaSpinner className="animate-spin mx-auto" />
+                      ) : (
+                        'Save Changes'
+                      )}
+                    </button>
+                    <button
+                      onClick={handleEditToggle}
+                      className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300 transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
               </div>
-
-              {/* Status */}
-              <div className="bg-gray-50 rounded-xl p-4 flex items-start gap-3 md:col-span-2">
-                <FaCheckCircle className="text-green-500 mt-1" />
-                <div>
-                  <p className="text-xs text-gray-400 font-medium">Account Status</p>
-                  <p className="text-green-600 font-medium">
-                    {admin.isActive ? 'Active' : 'Inactive'}
-                  </p>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
 
-          {/* Additional Info / Actions */}
+          {/* Footer */}
           <div className="border-t border-gray-100 px-4 sm:px-6 py-4 bg-gray-50/50 flex flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-gray-400">
-              Last updated: {formatDate(admin.updatedAt)}
+              Last updated: {formatDate(user.updatedAt)}
             </p>
             <Link to="/settings" className="text-xs text-red-600 hover:underline font-medium">
               Account Settings →
             </Link>
           </div>
         </div>
-
-        {/* Edit Mode placeholder – you can implement a modal or inline edit here */}
-        {isEditing && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold text-gray-800">Edit Profile</h3>
-                <button
-                  onClick={() => setIsEditing(false)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <FaTimes />
-                </button>
-              </div>
-              <p className="text-sm text-gray-500 mb-4">
-                Edit functionality coming soon. You can update your profile information here.
-              </p>
-              {/* Placeholder form fields */}
-              <div className="space-y-3">
-                <input
-                  type="text"
-                  placeholder="Name"
-                  defaultValue={admin.name}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-                />
-                <input
-                  type="email"
-                  placeholder="Email"
-                  defaultValue={admin.email}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
-                />
-                <button
-                  className="w-full bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 transition"
-                  onClick={() => {
-                    // Placeholder save
-                    alert('Profile update feature coming soon!');
-                    setIsEditing(false);
-                  }}
-                >
-                  Save Changes
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );

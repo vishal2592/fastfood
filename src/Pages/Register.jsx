@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { registerAdmin } from '../redux/slicer/adminSlice';
+import { registerUser } from '../redux/slicer/userSlice';   // <-- changed import
 import { 
   FaUser, 
   FaEnvelope, 
@@ -26,7 +26,8 @@ const Register = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  const { loading, error, success } = useSelector((state) => state.admin);
+  // Changed from state.admin to state.user
+  const { loading, error, success } = useSelector((state) => state.user);
 
   const [showPassword, setShowPassword] = useState(false);
   const [agreeTerms, setAgreeTerms] = useState(false);
@@ -40,7 +41,7 @@ const Register = () => {
   // Redirect to home on success
   useEffect(() => {
     if (success) {
-      navigate('/');
+      navigate('/login');
     }
   }, [success, navigate]);
 
@@ -79,8 +80,8 @@ const Register = () => {
     e.preventDefault();
     if (!validateForm()) return;
 
-    // Send only name, email, password
-    dispatch(registerAdmin({
+    // Send only name, email, password – now using registerUser
+    dispatch(registerUser({
       name: formData.name.trim(),
       email: formData.email,
       password: formData.password
@@ -321,7 +322,7 @@ const Register = () => {
           </p>
         </div>
 
-        {/* Right side branding - unchanged */}
+        {/* Right side branding */}
         <div className="hidden lg:flex lg:w-96 bg-gradient-to-br from-red-600 to-red-700 p-10 flex-col justify-between">
           <div className="relative">
             <div className="absolute -top-20 -right-20 w-64 h-64 bg-yellow-400 rounded-full opacity-10"></div>

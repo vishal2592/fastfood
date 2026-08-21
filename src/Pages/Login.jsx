@@ -2,11 +2,11 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { loginAdmin } from '../redux/slicer/adminSlice'; // adjust path
-import { 
-  FaEnvelope, 
-  FaLock, 
-  FaEye, 
+import { loginUser } from '../redux/slicer/userSlice'; // <-- changed import
+import {
+  FaEnvelope,
+  FaLock,
+  FaEye,
   FaEyeSlash,
   FaGoogle,
   FaFacebook,
@@ -24,8 +24,8 @@ const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
-  // Redux state
-  const { loading, error, success } = useSelector((state) => state.admin);
+  // Changed from state.admin to state.user
+  const { loading, error, user } = useSelector((state) => state.user);
 
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
@@ -43,31 +43,32 @@ const Login = () => {
       setRememberMe(true);
     }
   }, []);
+  console.log("LOGIN USER:", user);
+console.log("LOGIN LOADING:", loading);
+console.log("LOGIN ERROR:", error);
 
   // Redirect on success
   useEffect(() => {
-    if (success) {
-      // Optionally reset success state if you have reset action
-      // dispatch(resetAdminState());
-      navigate('/');
+    if (user) {
+      navigate("/");
     }
-  }, [success, navigate, dispatch]);
+  }, [user, navigate]);
 
   const validateForm = () => {
     const newErrors = {};
-    
+
     if (!formData.email) {
       newErrors.email = 'Email is required';
     } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'Please enter a valid email';
     }
-    
+
     if (!formData.password) {
       newErrors.password = 'Password is required';
     } else if (formData.password.length < 6) {
       newErrors.password = 'Password must be at least 6 characters';
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -76,8 +77,8 @@ const Login = () => {
     e.preventDefault();
     if (!validateForm()) return;
 
-    // Dispatch login thunk
-    dispatch(loginAdmin({
+    // Dispatch loginUser from userSlice
+    dispatch(loginUser({
       email: formData.email,
       password: formData.password
     }));
@@ -99,7 +100,6 @@ const Login = () => {
   };
 
   const handleSocialLogin = (provider) => {
-    // Social login not implemented – placeholder
     alert(`Social login with ${provider} not implemented yet.`);
   };
 
@@ -112,7 +112,7 @@ const Login = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-red-50 via-white to-orange-50 flex items-center justify-center p-4 pt-20">
       {/* Success Overlay */}
-      {success && (
+      {user && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center animate-fadeIn">
           <div className="bg-white rounded-3xl p-8 max-w-md w-full text-center shadow-2xl">
             <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -187,9 +187,8 @@ const Login = () => {
                   name="email"
                   value={formData.email}
                   onChange={handleInputChange}
-                  className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none transition-all duration-300 text-sm ${
-                    errors.email ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-red-500'
-                  }`}
+                  className={`w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:outline-none transition-all duration-300 text-sm ${errors.email ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-red-500'
+                    }`}
                   placeholder="Enter your email"
                 />
               </div>
@@ -217,9 +216,8 @@ const Login = () => {
                   name="password"
                   value={formData.password}
                   onChange={handleInputChange}
-                  className={`w-full pl-10 pr-12 py-3 border-2 rounded-xl focus:outline-none transition-all duration-300 text-sm ${
-                    errors.password ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-red-500'
-                  }`}
+                  className={`w-full pl-10 pr-12 py-3 border-2 rounded-xl focus:outline-none transition-all duration-300 text-sm ${errors.password ? 'border-red-500 focus:border-red-500' : 'border-gray-200 focus:border-red-500'
+                    }`}
                   placeholder="Enter your password"
                 />
                 <button
@@ -261,9 +259,8 @@ const Login = () => {
             <button
               type="submit"
               disabled={loading}
-              className={`w-full bg-gradient-to-r from-red-600 to-red-700 text-white py-3.5 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2 ${
-                loading ? 'opacity-70 cursor-not-allowed' : 'hover:from-red-700 hover:to-red-800 hover:scale-[1.02]'
-              } shadow-lg hover:shadow-xl`}
+              className={`w-full bg-gradient-to-r from-red-600 to-red-700 text-white py-3.5 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2 ${loading ? 'opacity-70 cursor-not-allowed' : 'hover:from-red-700 hover:to-red-800 hover:scale-[1.02]'
+                } shadow-lg hover:shadow-xl`}
             >
               {loading ? (
                 <>

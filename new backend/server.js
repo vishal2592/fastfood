@@ -10,6 +10,7 @@ dns.setServers(["1.1.1.1","8.8.8.8"])
 const adminAuthRoutes = require("./routes/adminAuthRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
 const productRoutes = require("./routes/productRoutes");
+const userRoutes = require("./routes/UserRoutes");
 
 const app = express();
 
@@ -42,6 +43,7 @@ app.get("/", (req, res) => {
 app.use("/api/admin", adminAuthRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/products", productRoutes);
+app.use("/api/users", require("./routes/userRoutes"));
 
 // =========================
 // DATABASE
