@@ -11,6 +11,8 @@ const adminAuthRoutes = require("./routes/adminAuthRoutes");
 const categoryRoutes = require("./routes/categoryRoutes");
 const productRoutes = require("./routes/productRoutes");
 const userRoutes = require("./routes/UserRoutes");
+const cartRoutes = require("./routes/cartRoutes");
+const wishlistRoutes = require("./routes/wishlistRoutes");
 
 const app = express();
 
@@ -44,6 +46,9 @@ app.use("/api/admin", adminAuthRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/users", require("./routes/userRoutes"));
+app.use("/api/cart", cartRoutes);
+app.use("/api/wishlist", wishlistRoutes);
+
 
 // =========================
 // DATABASE
