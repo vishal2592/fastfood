@@ -2,8 +2,34 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 
-// Generate JWT for User
+// ======================================================
+// HELPERS
+// ======================================================
+
+const getCookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite:
+    process.env.NODE_ENV === "production" ? "none" : "lax",
+  path: "/",
+  maxAge: 7 * 24 * 60 * 60 * 1000,
+});
+
+const getClearCookieOptions = () => ({
+  httpOnly: true,
+  secure: process.env.NODE_ENV === "production",
+  sameSite:
+    process.env.NODE_ENV === "production" ? "none" : "lax",
+  path: "/",
+});
+
 const generateToken = (user) => {
+  if (!process.env.JWT_SECRET) {
+    throw new Error(
+      "JWT_SECRET is not configured in environment variables"
+    );
+  }
+
   return jwt.sign(
     {
       id: user._id,
@@ -18,18 +44,55 @@ const generateToken = (user) => {
   );
 };
 
-// =========================
+const sanitizeUser = (user) => ({
+  id: user._id,
+  name: user.name,
+  email: user.email,
+  role: user.role,
+  isActive: user.isActive,
+  phone: user.phone,
+  address: user.address,
+  profileImage: user.profileImage,
+  emailVerified: user.emailVerified,
+  createdAt: user.createdAt,
+  lastLogin: user.lastLogin,
+});
+
+// ======================================================
 // USER REGISTER
-// =========================
+// ======================================================
+
 const registerUser = async (req, res) => {
   try {
-    const { name, email, password, phone, address } = req.body;
+    const {
+      name,
+      email,
+      password,
+      phone,
+      address,
+    } = req.body || {};
 
-    // Validation
-    if (!name || !email || !password) {
+    if (
+      typeof name !== "string" ||
+      !name.trim() ||
+      typeof email !== "string" ||
+      !email.trim() ||
+      typeof password !== "string" ||
+      !password
+    ) {
       return res.status(400).json({
         success: false,
         message: "Name, email and password are required",
+      });
+    }
+
+    const normalizedName = name.trim();
+    const normalizedEmail = email.toLowerCase().trim();
+
+    if (normalizedName.length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: "Name must be at least 2 characters",
       });
     }
 
@@ -40,21 +103,18 @@ const registerUser = async (req, res) => {
       });
     }
 
-    // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+
+    if (!emailRegex.test(normalizedEmail)) {
       return res.status(400).json({
         success: false,
         message: "Please provide a valid email address",
       });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
-
-    // Check if user already exists
     const existingUser = await User.findOne({
       email: normalizedEmail,
-    });
+    }).lean();
 
     if (existingUser) {
       return res.status(409).json({
@@ -63,75 +123,83 @@ const registerUser = async (req, res) => {
       });
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create user
     const user = await User.create({
-      name: name.trim(),
+      name: normalizedName,
       email: normalizedEmail,
       password: hashedPassword,
-      role: "user", // Default role
-      phone: phone || undefined,
-      address: address || undefined,
+      role: "user",
+
+      ...(typeof phone === "string" && phone.trim()
+        ? { phone: phone.trim() }
+        : {}),
+
+      ...(typeof address === "string" && address.trim()
+        ? { address: address.trim() }
+        : {}),
     });
 
-    // Generate token
     const token = generateToken(user);
 
-    // Set cookie
-    res.cookie("userToken", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie(
+      "userToken",
+      token,
+      getCookieOptions()
+    );
 
-    // Return response (excluding password)
     return res.status(201).json({
       success: true,
       message: "User registered successfully",
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        isActive: user.isActive,
-        phone: user.phone,
-        address: user.address,
-        profileImage: user.profileImage,
-        emailVerified: user.emailVerified,
-        createdAt: user.createdAt,
-      },
+      user: sanitizeUser(user),
     });
   } catch (error) {
     console.error("Register User Error:", error);
 
+    if (error?.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: "User with this email already exists",
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: "Server error",
-      error: error.message,
+      error:
+        process.env.NODE_ENV === "production"
+          ? undefined
+          : error.message,
     });
   }
 };
 
-// =========================
+// ======================================================
 // USER LOGIN
-// =========================
+// ======================================================
+
 const loginUser = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const {
+      email,
+      password,
+    } = req.body || {};
 
-    if (!email || !password) {
+    if (
+      typeof email !== "string" ||
+      !email.trim() ||
+      typeof password !== "string" ||
+      !password
+    ) {
       return res.status(400).json({
         success: false,
         message: "Email and password are required",
       });
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedEmail =
+      email.toLowerCase().trim();
 
-    // Find user
     const user = await User.findOne({
       email: normalizedEmail,
     });
@@ -143,16 +211,27 @@ const loginUser = async (req, res) => {
       });
     }
 
-    // Check if user is active
-    if (!user.isActive) {
+    // Only explicitly inactive users are blocked
+    if (user.isActive === false) {
       return res.status(403).json({
         success: false,
-        message: "Your account is inactive. Please contact support.",
+        message:
+          "Your account is inactive. Please contact support.",
       });
     }
 
-    // Verify password
-    const isPasswordCorrect = await bcrypt.compare(password, user.password);
+    if (!user.password) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password",
+      });
+    }
+
+    const isPasswordCorrect =
+      await bcrypt.compare(
+        password,
+        user.password
+      );
 
     if (!isPasswordCorrect) {
       return res.status(401).json({
@@ -161,37 +240,22 @@ const loginUser = async (req, res) => {
       });
     }
 
-    // Update last login
-    await User.findByIdAndUpdate(user._id, {
-      lastLogin: new Date(),
-    });
+    user.lastLogin = new Date();
 
-    // Generate token
+    await user.save();
+
     const token = generateToken(user);
 
-    // Set cookie
-    res.cookie("userToken", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie(
+      "userToken",
+      token,
+      getCookieOptions()
+    );
 
     return res.status(200).json({
       success: true,
       message: "User login successful",
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        isActive: user.isActive,
-        phone: user.phone,
-        address: user.address,
-        profileImage: user.profileImage,
-        emailVerified: user.emailVerified,
-        lastLogin: user.lastLogin,
-      },
+      user: sanitizeUser(user),
     });
   } catch (error) {
     console.error("Login User Error:", error);
@@ -199,17 +263,30 @@ const loginUser = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Server error",
-      error: error.message,
+      error:
+        process.env.NODE_ENV === "production"
+          ? undefined
+          : error.message,
     });
   }
 };
 
-// =========================
+// ======================================================
 // GET USER PROFILE
-// =========================
+// ======================================================
+
 const getUserProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id)
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    const user = await User.findById(userId)
       .select("-password")
       .lean();
 
@@ -225,23 +302,44 @@ const getUserProfile = async (req, res) => {
       user,
     });
   } catch (error) {
-    console.error("Get User Profile Error:", error);
+    console.error(
+      "Get User Profile Error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
       message: "Server error",
-      error: error.message,
+      error:
+        process.env.NODE_ENV === "production"
+          ? undefined
+          : error.message,
     });
   }
 };
 
-// =========================
+// ======================================================
 // UPDATE USER PROFILE
-// =========================
+// ======================================================
+
 const updateUserProfile = async (req, res) => {
   try {
-    const { name, phone, address, currentPassword, newPassword } = req.body;
-    const userId = req.user.id;
+    const {
+      name,
+      phone,
+      address,
+      currentPassword,
+      newPassword,
+    } = req.body || {};
+
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
 
     const user = await User.findById(userId);
 
@@ -252,96 +350,192 @@ const updateUserProfile = async (req, res) => {
       });
     }
 
-    // Update basic info
-    if (name) user.name = name.trim();
-    if (phone) user.phone = phone;
-    if (address) user.address = address;
+    // ------------------------------
+    // Update Name
+    // ------------------------------
 
-    // Handle password change
-    if (currentPassword && newPassword) {
-      const isPasswordCorrect = await bcrypt.compare(
-        currentPassword,
-        user.password
-      );
+    if (name !== undefined) {
+      if (
+        typeof name !== "string" ||
+        !name.trim()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Name cannot be empty",
+        });
+      }
+
+      user.name = name.trim();
+    }
+
+    // ------------------------------
+    // Update Phone
+    // ------------------------------
+
+    if (phone !== undefined) {
+      user.phone =
+        typeof phone === "string"
+          ? phone.trim()
+          : phone;
+    }
+
+    // ------------------------------
+    // Update Address
+    // ------------------------------
+
+    if (address !== undefined) {
+      user.address =
+        typeof address === "string"
+          ? address.trim()
+          : address;
+    }
+
+    // ------------------------------
+    // Password Validation
+    // ------------------------------
+
+    const hasCurrentPassword =
+      typeof currentPassword === "string" &&
+      currentPassword.length > 0;
+
+    const hasNewPassword =
+      typeof newPassword === "string" &&
+      newPassword.length > 0;
+
+    if (
+      hasCurrentPassword !==
+      hasNewPassword
+    ) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Both currentPassword and newPassword are required to change password",
+      });
+    }
+
+    // ------------------------------
+    // Change Password
+    // ------------------------------
+
+    if (
+      hasCurrentPassword &&
+      hasNewPassword
+    ) {
+      if (!user.password) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Password cannot be changed for this account",
+        });
+      }
+
+      const isPasswordCorrect =
+        await bcrypt.compare(
+          currentPassword,
+          user.password
+        );
 
       if (!isPasswordCorrect) {
         return res.status(401).json({
           success: false,
-          message: "Current password is incorrect",
+          message:
+            "Current password is incorrect",
         });
       }
 
       if (newPassword.length < 6) {
         return res.status(400).json({
           success: false,
-          message: "New password must be at least 6 characters",
+          message:
+            "New password must be at least 6 characters",
         });
       }
 
-      user.password = await bcrypt.hash(newPassword, 12);
+      if (
+        currentPassword === newPassword
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "New password must be different from current password",
+        });
+      }
+
+      user.password =
+        await bcrypt.hash(
+          newPassword,
+          12
+        );
     }
 
     await user.save();
 
     return res.status(200).json({
       success: true,
-      message: "Profile updated successfully",
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        address: user.address,
-        profileImage: user.profileImage,
-        emailVerified: user.emailVerified,
-      },
+      message:
+        "Profile updated successfully",
+      user: sanitizeUser(user),
     });
   } catch (error) {
-    console.error("Update User Profile Error:", error);
+    console.error(
+      "Update User Profile Error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
       message: "Server error",
-      error: error.message,
+      error:
+        process.env.NODE_ENV === "production"
+          ? undefined
+          : error.message,
     });
   }
 };
 
-// =========================
+// ======================================================
 // USER LOGOUT
-// =========================
+// ======================================================
+
 const logoutUser = async (req, res) => {
   try {
-    res.clearCookie("userToken", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    });
+    res.clearCookie(
+      "userToken",
+      getClearCookieOptions()
+    );
 
     return res.status(200).json({
       success: true,
       message: "User logout successful",
     });
   } catch (error) {
-    console.error("Logout User Error:", error);
+    console.error(
+      "Logout User Error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
       message: "Server error",
-      error: error.message,
+      error:
+        process.env.NODE_ENV === "production"
+          ? undefined
+          : error.message,
     });
   }
 };
 
-// =========================
-// GET ALL USERS (Admin only)
-// =========================
+// ======================================================
+// GET ALL USERS
+// ADMIN ONLY
+// ======================================================
+
 const getAllUsers = async (req, res) => {
   try {
     const users = await User.find()
       .select("-password")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
 
     return res.status(200).json({
       success: true,
@@ -349,22 +543,37 @@ const getAllUsers = async (req, res) => {
       users,
     });
   } catch (error) {
-    console.error("Get All Users Error:", error);
+    console.error(
+      "Get All Users Error:",
+      error
+    );
 
     return res.status(500).json({
       success: false,
       message: "Server error",
-      error: error.message,
+      error:
+        process.env.NODE_ENV === "production"
+          ? undefined
+          : error.message,
     });
   }
 };
 
-// =========================
-// DELETE USER (Admin only)
-// =========================
+// ======================================================
+// DELETE USER
+// ADMIN ONLY
+// ======================================================
+
 const deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+    }
 
     const user = await User.findById(id);
 
@@ -375,13 +584,18 @@ const deleteUser = async (req, res) => {
       });
     }
 
-    // Prevent deleting the last admin
+    // Prevent deleting last admin
     if (user.role === "admin") {
-      const adminCount = await User.countDocuments({ role: "admin" });
+      const adminCount =
+        await User.countDocuments({
+          role: "admin",
+        });
+
       if (adminCount <= 1) {
         return res.status(400).json({
           success: false,
-          message: "Cannot delete the last admin user",
+          message:
+            "Cannot delete the last admin user",
         });
       }
     }
@@ -393,22 +607,47 @@ const deleteUser = async (req, res) => {
       message: "User deleted successfully",
     });
   } catch (error) {
-    console.error("Delete User Error:", error);
+    console.error(
+      "Delete User Error:",
+      error
+    );
+
+    if (error?.name === "CastError") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID",
+      });
+    }
 
     return res.status(500).json({
       success: false,
       message: "Server error",
-      error: error.message,
+      error:
+        process.env.NODE_ENV === "production"
+          ? undefined
+          : error.message,
     });
   }
 };
 
-// =========================
-// TOGGLE USER STATUS (Admin only)
-// =========================
-const toggleUserStatus = async (req, res) => {
+// ======================================================
+// TOGGLE USER STATUS
+// ADMIN ONLY
+// ======================================================
+
+const toggleUserStatus = async (
+  req,
+  res
+) => {
   try {
     const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "User ID is required",
+      });
+    }
 
     const user = await User.findById(id);
 
@@ -419,40 +658,73 @@ const toggleUserStatus = async (req, res) => {
       });
     }
 
-    // Prevent deactivating the last admin
-    if (user.role === "admin" && user.isActive) {
-      const adminCount = await User.countDocuments({ role: "admin", isActive: true });
-      if (adminCount <= 1) {
+    // Prevent deactivating last active admin
+    if (
+      user.role === "admin" &&
+      user.isActive !== false
+    ) {
+      const activeAdminCount =
+        await User.countDocuments({
+          role: "admin",
+          isActive: { $ne: false },
+        });
+
+      if (activeAdminCount <= 1) {
         return res.status(400).json({
           success: false,
-          message: "Cannot deactivate the last active admin",
+          message:
+            "Cannot deactivate the last active admin",
         });
       }
     }
 
-    user.isActive = !user.isActive;
+    user.isActive =
+      user.isActive === false;
+
     await user.save();
 
     return res.status(200).json({
       success: true,
-      message: `User ${user.isActive ? "activated" : "deactivated"} successfully`,
+      message: `User ${
+        user.isActive
+          ? "activated"
+          : "deactivated"
+      } successfully`,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
+        role: user.role,
         isActive: user.isActive,
       },
     });
   } catch (error) {
-    console.error("Toggle User Status Error:", error);
+    console.error(
+      "Toggle User Status Error:",
+      error
+    );
+
+    if (error?.name === "CastError") {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid user ID",
+      });
+    }
 
     return res.status(500).json({
       success: false,
       message: "Server error",
-      error: error.message,
+      error:
+        process.env.NODE_ENV === "production"
+          ? undefined
+          : error.message,
     });
   }
 };
+
+// ======================================================
+// EXPORTS
+// ======================================================
 
 module.exports = {
   registerUser,
